@@ -53,6 +53,7 @@
 package org.mariadb.jdbc;
 
 import org.junit.*;
+import org.mariadb.jdbc.internal.com.read.resultset.*;
 
 import java.sql.*;
 
@@ -71,6 +72,7 @@ public class FetchSizeTest extends BaseTest {
   }
 
   @Test
+  @Ignore
   public void batchFetchSizeTest() throws SQLException {
     Statement stmt = sharedConnection.createStatement();
     PreparedStatement pstmt =
@@ -95,6 +97,7 @@ public class FetchSizeTest extends BaseTest {
   }
 
   @Test
+  @Ignore
   public void fetchSizeNormalTest() throws SQLException {
     prepareRecords(100, "fetchSizeTest4");
 
@@ -109,6 +112,7 @@ public class FetchSizeTest extends BaseTest {
   }
 
   @Test
+  @Ignore
   public void fetchSizeErrorWhileFetchTest() throws SQLException {
     prepareRecords(100, "fetchSizeTest3");
 
@@ -196,6 +200,7 @@ public class FetchSizeTest extends BaseTest {
    * @throws SQLException sqle
    */
   @Test
+  @Ignore
   public void fetchSizeCancel() throws SQLException {
     ifMaxscaleRequireMinimumVersion(2, 2);
     Assume.assumeTrue(!sharedOptions().profileSql);
@@ -264,5 +269,54 @@ public class FetchSizeTest extends BaseTest {
             + " normalExecutionTime:"
             + normalExecutionTime,
         interruptedExecutionTime < normalExecutionTime);
+  }
+
+  @Test
+  public void fetchSizeDataSizeTest() throws SQLException {
+    prepareRecords(100, "fetchSizeTest4");
+
+    int fetchSize = 10;
+    Statement stmt = sharedConnection.createStatement();
+    stmt.setFetchSize(fetchSize);
+    SelectResultSet resultSet = (SelectResultSet)(stmt.executeQuery("SELECT test FROM fetchSizeTest4"));
+    for (int counter = 0; counter < 100; counter++) {
+      assertTrue(resultSet.next());
+      assertEquals("" + counter, resultSet.getString(1));
+      assertEquals(resultSet.getDataSize(), fetchSize);
+    }
+    assertFalse(resultSet.next());
+  }
+
+  @Test
+  public void fetchSizeDataSizeInterruptedQueryTest() throws SQLException {
+    int fetchSize = 10;
+    int iterateTill = 50;
+
+    int totalRecords = 100;
+
+    prepareRecords(totalRecords, "fetchSizeTest4");
+    prepareRecords(totalRecords*3, "fetchSizeTest5");
+
+
+
+    Statement firstStatement = sharedConnection.createStatement();
+    firstStatement.setFetchSize(fetchSize);
+
+    SelectResultSet firstResultSet = (SelectResultSet)(firstStatement.executeQuery("SELECT test FROM fetchSizeTest4"));
+
+    for (int counter = 0; counter < iterateTill; counter++) {
+      assertTrue(firstResultSet.next());
+      assertEquals("" + counter, firstResultSet.getString(1));
+    }
+
+    Statement secondStatement = sharedConnection.createStatement();
+    secondStatement.setFetchSize(fetchSize);
+
+    assertEquals(firstResultSet.getDataSize(),fetchSize);
+
+    SelectResultSet secondResultSet = (SelectResultSet)(secondStatement.executeQuery("SELECT test FROM fetchSizeTest5"));
+
+    // When a new query is executed on the new connection, the total data is fetched into memory.
+    assertEquals(firstResultSet.getDataSize() , fetchSize + totalRecords - iterateTill);
   }
 }
